@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Deserializer, de::IgnoredAny};
+use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
 
 use crate::task;
 pub fn get_app_state_filepath() -> &'static str {
@@ -9,13 +10,26 @@ pub fn get_app_state_filepath() -> &'static str {
 }
 
 pub fn initialize_default_app_state() {
-    &AppState::get_default().update_app_state();
+    AppState::get_default().update_app_state();
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppState {
-    cur_points: i64,
-    tasks: Vec<task::Task>,
+    pub cur_points: i64,
+    pub tasks: Vec<task::Task>,
+    #[serde(default, deserialize_with = "skip", skip_serializing)]
+    pub sys:System
+}
+
+fn skip<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default,
+{
+    // Ignore the data in the input.
+    IgnoredAny::deserialize(deserializer)?;
+    Ok(T::default())
 }
 
 impl AppState {
@@ -23,6 +37,7 @@ impl AppState {
         return AppState {
             cur_points: (0),
             tasks: Vec::new(),
+            sys:System::new_all()
         };
     }
 
