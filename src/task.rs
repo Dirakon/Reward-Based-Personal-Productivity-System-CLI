@@ -1,3 +1,6 @@
+use chrono;
+use chrono::DateTime;
+use chrono::Local;
 use std::fs;
 use std::path::Path;
 
@@ -18,6 +21,7 @@ pub struct Task {
 
 impl Task {
     pub fn init_task_from_cli() -> Task {
+        chrono::Local::now();
         let name = get_line(Some("Enter the name of the task: "));
         let description = get_line(Some("Enter the description of the task: "));
         let is_task_regular = get_line_with_condition(Some("Is the task regular?(y/n)"), |line| {
@@ -29,7 +33,7 @@ impl Task {
             Some("Choose task reward type: \n1 - per hour reward\n2 - per completion reward"),
             |int_val| *int_val == 1 || *int_val == 2,
         ) {
-            1 => TaskRewardSystem::PerHourReward(false),
+            1 => TaskRewardSystem::PerHourReward(None),
             _ => TaskRewardSystem::PerCompletionReward,
         };
         let reward: f64 = get_parsed_line(Some("Enter the reward amount: "));
@@ -43,18 +47,27 @@ impl Task {
     }
     pub fn tick_task(&mut self) -> TickResponse {
         match self.reward_system {
-            TaskRewardSystem::PerHourReward(is_ticked) => {
-                self.reward_system = TaskRewardSystem::PerHourReward(!is_ticked);
-                if is_ticked {
-                    return TickResponse {
-                        task_is_to_be_removed: !self.is_task_regular,
-                        reward_acquired: self.reward,
-                    };
+            TaskRewardSystem::PerHourReward(starting_date) => {
+                self.reward_system = TaskRewardSystem::PerHourReward(if starting_date.is_some() {
+                    None
                 } else {
-                    return TickResponse {
-                        task_is_to_be_removed: false,
-                        reward_acquired: 0.0,
-                    };
+                    Some(Local::now())
+                });
+                match starting_date {
+                    Some(date) => {
+                        return TickResponse {
+                            task_is_to_be_removed: !self.is_task_regular,
+                            reward_acquired: (Local::now().signed_duration_since(date).num_minutes()
+                                as f64)
+                                * (self.reward / 60.0),
+                        }
+                    }
+                    None => {
+                        return TickResponse {
+                            task_is_to_be_removed: false,
+                            reward_acquired: 0.0,
+                        }
+                    }
                 }
             }
             TaskRewardSystem::PerCompletionReward => {
@@ -77,10 +90,10 @@ impl Display for Task {
             TaskRewardSystem::PerCompletionReward => {
                 format!("Per-completion reward ({})", self.reward)
             }
-            TaskRewardSystem::PerHourReward(has_started) => format!(
+            TaskRewardSystem::PerHourReward(starting_date) => format!(
                 "Per-hour reward ({}), {}",
                 self.reward,
-                if has_started {
+                if starting_date.is_some() {
                     "started"
                 } else {
                     "not started"
@@ -96,6 +109,6 @@ impl Display for Task {
 }
 #[derive(Serialize, Deserialize)]
 pub enum TaskRewardSystem {
-    PerHourReward(bool),
+    PerHourReward(Option<DateTime<Local>>),
     PerCompletionReward,
 }
