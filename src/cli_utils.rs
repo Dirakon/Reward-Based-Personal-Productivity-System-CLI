@@ -6,7 +6,7 @@ pub fn get_line(prompt:Option<&str>)->String{
     };
     let mut input = String::new();
     std::io::stdin().read_line(&mut input).expect("Console reading failed");
-    return input;
+    return input.strip_suffix('\n').unwrap().to_string();
 }
 
 pub fn get_parsed_line<T: std::str::FromStr>(prompt:Option<&str>)->T{
@@ -30,7 +30,9 @@ pub fn get_parsed_line_with_condition<T: std::str::FromStr,F>(prompt:Option<&str
             true => val,
             false => get_parsed_line_with_condition(prompt, condition)
         },
-        Err(er) => get_parsed_line_with_condition(prompt, condition)
+        Err(er) => {
+            get_parsed_line_with_condition(prompt, condition)
+        }
 
     }
 }
