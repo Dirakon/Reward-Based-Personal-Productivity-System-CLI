@@ -9,11 +9,11 @@ use std::fmt::{Display, Formatter, Result};
 
 #[derive(Serialize, Deserialize)]
 pub struct Task {
-    is_task_regular: bool,
-    reward_system: TaskRewardSystem,
-    reward: f64,
-    description: String,
-    name: String,
+    pub is_task_regular: bool,
+    pub reward_system: TaskRewardSystem,
+    pub reward: f64,
+    pub description: String,
+    pub name: String,
 }
 
 impl Task {
@@ -41,8 +41,36 @@ impl Task {
             name,
         };
     }
+    pub fn tick_task(&mut self) -> TickResponse {
+        match self.reward_system {
+            TaskRewardSystem::PerHourReward(is_ticked) => {
+                self.reward_system = TaskRewardSystem::PerHourReward(!is_ticked);
+                if is_ticked {
+                    return TickResponse {
+                        task_is_to_be_removed: !self.is_task_regular,
+                        reward_acquired: self.reward,
+                    };
+                } else {
+                    return TickResponse {
+                        task_is_to_be_removed: false,
+                        reward_acquired: 0.0,
+                    };
+                }
+            }
+            TaskRewardSystem::PerCompletionReward => {
+                return TickResponse {
+                    task_is_to_be_removed: !self.is_task_regular,
+                    reward_acquired: self.reward,
+                };
+            }
+        }
+    }
 }
 
+pub struct TickResponse {
+    pub task_is_to_be_removed: bool,
+    pub reward_acquired: f64,
+}
 impl Display for Task {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let reward_system_description = match self.reward_system {

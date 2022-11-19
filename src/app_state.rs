@@ -16,7 +16,7 @@ pub fn initialize_default_app_state() {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AppState {
-    pub cur_points: i64,
+    pub cur_points: f64,
     pub tasks: Vec<task::Task>,
     #[serde(default, deserialize_with = "skip", skip_serializing)]
     pub sys:System
@@ -35,7 +35,7 @@ where
 impl AppState {
     fn get_default() -> AppState {
         return AppState {
-            cur_points: (0),
+            cur_points: (0.0),
             tasks: Vec::new(),
             sys:System::new_all()
         };
