@@ -1,12 +1,15 @@
 pub mod app_state;
 pub mod cli_utils;
 pub mod reward;
+pub mod reward_collection;
 pub mod task;
 
 use app_state::AppState;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
+use std::io;
+use std::path;
 use std::path::Path;
 use sysinfo::{ProcessExt, SystemExt};
 
@@ -18,7 +21,7 @@ fn main() {
     }
 
     let args: Vec<String> = env::args().collect();
-    let arguments_description = "\top - opens in operational mode, with task editing and such.\n\tef \"*reward collection*\" \"*reward name (optional)*\" - encodes file for reward in the given reward collection (default name is the file name)";
+    let arguments_description = "\top - opens in operational mode, with task editing and such.\n\tef - encodes file for reward in the given reward collection (default name is the file name)\n\t\tArg1: \"*path to file or directory to be encoded*\" \n\t\tArg2: \"*reward collection*\" \n\t\tArg3: \"*reward name (optional if filename is specified [not directory])*\"";
     println!("{:?}", args);
     if args.len() <= 1 {
         println!("No command line arguments!\n{}", arguments_description);
@@ -44,25 +47,65 @@ fn control_loop() {
     let mut state = app_state::AppState::load_app_state();
     state.sys.refresh_all();
     loop {
+        println!("\n\n\n");
+        println!("Points: {}", state.cur_points);
         edit_tasks(&mut state);
         state.update_app_state();
     }
 }
 
 fn start_reward_addition(args: Vec<String>) -> Option<()> {
+    let state = AppState::load_app_state();
+
     let path_as_string = args.get(2)?.clone();
     let path_to_file = Path::new(&path_as_string);
-    let reward_name = if args.len() >= 5 {
-        args[4].clone()
+    if path_to_file.is_dir() {
+        match add_rewards_in_folder(state, path_to_file, &args) {
+            Err(err) => println!("{:?}", err),
+            _ => (),
+        };
     } else {
-        path_to_file.file_name()?.to_str()?.to_string()
-    };
-
-    reward_addition(path_as_string, args.get(3)?.to_string(), reward_name);
+        add_rewards_in_file(state, path_to_file, &args);
+    }
     return Some(());
 }
 
-fn reward_addition(file_to_encode: String, reward_collection: String, reward_name: String) {}
+fn add_rewards_in_folder(
+    mut state: AppState,
+    folder_path: &Path,
+    args: &Vec<String>,
+) -> io::Result<AppState> {
+    for entry in fs::read_dir(folder_path)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            state = add_rewards_in_folder(state, &path, args)?;
+        } else {
+            match add_rewards_in_file(state, &entry.path(), args) {
+                Some(new_state) => state = new_state,
+                None => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "problems working with specific file",
+                    ))
+                }
+            };
+        }
+    }
+    return Ok(state);
+}
+
+fn add_rewards_in_file(state: AppState, file_path: &Path, args: &Vec<String>) -> Option<AppState> {
+    let reward_name = if args.len() >= 5 {
+        args[4].clone()
+    } else {
+        file_path.file_name()?.to_str()?.to_string()
+    };
+
+    reward_addition(file_path, args.get(3)?.to_string(), reward_name);
+    return Some(state);
+}
+fn reward_addition(file_to_encode: &Path, reward_collection: String, reward_name: String) {}
 
 fn edit_tasks(state: &mut AppState) {
     if !state.tasks.is_empty() {
@@ -87,7 +130,7 @@ fn edit_tasks(state: &mut AppState) {
         3 => {
             // Tick task
             let index_to_tick: usize = get_parsed_line_with_condition(
-                Some("Enter index of task to complete: "),
+                Some("Enter index of task to tick: "),
                 |int_val: &usize| *int_val > 0 && *int_val <= state.tasks.len(),
             ) - 1;
             let tick_response = state.tasks[index_to_tick].tick_task();
