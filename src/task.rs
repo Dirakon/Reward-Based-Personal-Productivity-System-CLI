@@ -13,7 +13,7 @@ use std::fmt::{Display, Formatter, Result};
 #[derive(Serialize, Deserialize)]
 pub struct Task {
     pub is_task_regular: bool,
-    pub reward_system: TaskRewardSystem,
+    pub reward_system: RewardPointTransferProtocol,
     pub reward: f64,
     pub description: String,
     pub name: String,
@@ -33,8 +33,8 @@ impl Task {
             Some("Choose task reward type: \n1 - per hour reward\n2 - per completion reward"),
             |int_val| *int_val == 1 || *int_val == 2,
         ) {
-            1 => TaskRewardSystem::PerHourReward(None),
-            _ => TaskRewardSystem::PerCompletionReward,
+            1 => RewardPointTransferProtocol::HourlyTransfer(None),
+            _ => RewardPointTransferProtocol::SingularTransfer,
         };
         let reward: f64 = get_parsed_line(Some("Enter the reward amount: "));
         return Task {
@@ -47,8 +47,8 @@ impl Task {
     }
     pub fn tick_task(&mut self) -> TickResponse {
         match self.reward_system {
-            TaskRewardSystem::PerHourReward(starting_date) => {
-                self.reward_system = TaskRewardSystem::PerHourReward(if starting_date.is_some() {
+            RewardPointTransferProtocol::HourlyTransfer(starting_date) => {
+                self.reward_system = RewardPointTransferProtocol::HourlyTransfer(if starting_date.is_some() {
                     None
                 } else {
                     Some(Local::now())
@@ -70,7 +70,7 @@ impl Task {
                     }
                 }
             }
-            TaskRewardSystem::PerCompletionReward => {
+            RewardPointTransferProtocol::SingularTransfer => {
                 return TickResponse {
                     task_is_to_be_removed: !self.is_task_regular,
                     reward_acquired: self.reward,
@@ -87,10 +87,10 @@ pub struct TickResponse {
 impl Display for Task {
     fn fmt(&self, f: &mut Formatter) -> Result {
         let reward_system_description = match self.reward_system {
-            TaskRewardSystem::PerCompletionReward => {
+            RewardPointTransferProtocol::SingularTransfer => {
                 format!("Per-completion reward ({})", self.reward)
             }
-            TaskRewardSystem::PerHourReward(starting_date) => format!(
+            RewardPointTransferProtocol::HourlyTransfer(starting_date) => format!(
                 "Per-hour reward ({}), {}",
                 self.reward,
                 if starting_date.is_some() {
@@ -108,7 +108,7 @@ impl Display for Task {
     }
 }
 #[derive(Serialize, Deserialize)]
-pub enum TaskRewardSystem {
-    PerHourReward(Option<DateTime<Local>>),
-    PerCompletionReward,
+pub enum RewardPointTransferProtocol {
+    HourlyTransfer(Option<DateTime<Local>>),
+    SingularTransfer,
 }

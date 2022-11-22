@@ -21,19 +21,20 @@ fn main() {
     }
 
     let args: Vec<String> = env::args().collect();
-    let arguments_description = "\top - opens in operational mode, with task editing and such.\n\tef - encodes file for reward in the given reward collection (default name is the file name)\n\t\tArg1: \"*path to file or directory to be encoded*\" \n\t\tArg2: \"*reward collection*\" \n\t\tArg3: \"*reward name (optional if filename is specified [not directory])*\"";
+    let arguments_description = "\tte - opens in task editing mode, with task ticking and such.\n\tef - encodes file for reward in the given reward collection (default name is the file name)\n\t\tArg1: \"*path to file or directory to be encoded*\" \n\t\tArg2: \"*reward collection*\" \n\t\tArg3: \"*reward name (optional)*\"\n\tre - opens in reward editing mode, where you can buy/edit rewards";
     println!("{:?}", args);
     if args.len() <= 1 {
         println!("No command line arguments!\n{}", arguments_description);
         return;
     }
     match args[1].as_str() {
-        "op" => control_loop(),
-        "ar" => {
+        "te" => task_editing_loop(),
+        "ef" => {
             if start_reward_addition(args).is_none() {
                 println!("Incorrect arguments!\n{}", arguments_description);
             }
         }
+        "re" => reward_editing_loop(),
         _ => println!("Incorrect arguments!\n{}", arguments_description),
     }
 
@@ -43,9 +44,17 @@ fn main() {
     // println!("{}",state.cur_points);
 }
 
-fn control_loop() {
+fn reward_editing_loop() {
     let mut state = app_state::AppState::load_app_state();
-    state.sys.refresh_all();
+    loop {
+        println!("\n\n\n");
+        println!("Points: {}", state.cur_points);
+        edit_rewards(&mut state);
+        state.update_app_state();
+    }
+}
+fn task_editing_loop() {
+    let mut state = app_state::AppState::load_app_state();
     loop {
         println!("\n\n\n");
         println!("Points: {}", state.cur_points);
@@ -59,6 +68,9 @@ fn start_reward_addition(args: Vec<String>) -> Option<()> {
 
     let path_as_string = args.get(2)?.clone();
     let path_to_file = Path::new(&path_as_string);
+    if !path_to_file.exists() {
+        return None;
+    }
     if path_to_file.is_dir() {
         match add_rewards_in_folder(state, path_to_file, &args) {
             Err(err) => println!("{:?}", err),
@@ -105,7 +117,14 @@ fn add_rewards_in_file(state: AppState, file_path: &Path, args: &Vec<String>) ->
     reward_addition(file_path, args.get(3)?.to_string(), reward_name);
     return Some(state);
 }
-fn reward_addition(file_to_encode: &Path, reward_collection: String, reward_name: String) {}
+fn reward_addition(file_to_encode: &Path, reward_collection: String, reward_name: String) {
+    println!(
+        "Adding reward to {} by name {}: path is {}",
+        reward_collection,
+        reward_name,
+        file_to_encode.to_string_lossy()
+    );
+}
 
 fn edit_tasks(state: &mut AppState) {
     if !state.tasks.is_empty() {
@@ -154,4 +173,8 @@ fn edit_tasks(state: &mut AppState) {
             state.tasks.push(new_task);
         }
     }
+}
+
+fn edit_rewards(state: &mut AppState){
+
 }

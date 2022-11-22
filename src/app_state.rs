@@ -43,7 +43,9 @@ impl AppState {
 
     pub fn load_app_state() -> AppState {
         let contents = fs::read_to_string(get_app_state_filepath()).expect("read from file failed");
-        return serde_json::from_str(&contents).unwrap();
+        let mut state:AppState = serde_json::from_str(&contents).unwrap();
+        state.sys.refresh_all();
+        return state;
     }
     
     pub fn update_app_state(&self) {
