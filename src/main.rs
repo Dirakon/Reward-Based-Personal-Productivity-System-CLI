@@ -107,23 +107,25 @@ fn add_rewards_in_folder(
     return Ok(state);
 }
 
-fn add_rewards_in_file(state: AppState, file_path: &Path, args: &Vec<String>) -> Option<AppState> {
+fn add_rewards_in_file(mut state: AppState, file_path: &Path, args: &Vec<String>) -> Option<AppState> {
     let reward_name = if args.len() >= 5 {
         args[4].clone()
     } else {
         file_path.file_name()?.to_str()?.to_string()
     };
 
-    reward_addition(file_path, args.get(3)?.to_string(), reward_name);
+    state = reward_addition(state,file_path, args.get(3)?.to_string(), reward_name);
     return Some(state);
 }
-fn reward_addition(file_to_encode: &Path, reward_collection: String, reward_name: String) {
+fn reward_addition(state:AppState, file_to_encode: &Path, reward_collection: String, reward_name: String)->AppState {
     println!(
         "Adding reward to {} by name {}: path is {}",
         reward_collection,
         reward_name,
         file_to_encode.to_string_lossy()
     );
+    //TODO: actually add rewards
+    return state;
 }
 
 fn edit_tasks(state: &mut AppState) {

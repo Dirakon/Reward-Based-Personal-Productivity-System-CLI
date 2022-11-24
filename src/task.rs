@@ -12,7 +12,7 @@ use std::fmt::{Display, Formatter, Result};
 
 #[derive(Serialize, Deserialize)]
 pub struct Task {
-    pub is_task_regular: bool,
+    pub is_regular: bool,
     pub reward_system: RewardPointTransferProtocol,
     pub reward: f64,
     pub description: String,
@@ -38,7 +38,7 @@ impl Task {
         };
         let reward: f64 = get_parsed_line(Some("Enter the reward amount: "));
         return Task {
-            is_task_regular,
+            is_regular: is_task_regular,
             reward_system,
             reward,
             description,
@@ -56,7 +56,7 @@ impl Task {
                 match starting_date {
                     Some(date) => {
                         return TickResponse {
-                            task_is_to_be_removed: !self.is_task_regular,
+                            task_is_to_be_removed: !self.is_regular,
                             reward_acquired: (Local::now().signed_duration_since(date).num_minutes()
                                 as f64)
                                 * (self.reward / 60.0),
@@ -72,7 +72,7 @@ impl Task {
             }
             RewardPointTransferProtocol::SingularTransfer => {
                 return TickResponse {
-                    task_is_to_be_removed: !self.is_task_regular,
+                    task_is_to_be_removed: !self.is_regular,
                     reward_acquired: self.reward,
                 };
             }
@@ -103,7 +103,7 @@ impl Display for Task {
         return write!(
             f,
             "name: {}\ndescription: {}\nis_regular: {}\nreward system description: {}",
-            self.name, self.description, self.is_task_regular, reward_system_description
+            self.name, self.description, self.is_regular, reward_system_description
         );
     }
 }
