@@ -16,21 +16,33 @@ use crate::cli_utils::{
 pub enum RewardType {
     DecodeFiles(DecodeFilesReward),
 }
+impl RewardType {
+    pub fn is_decode_files(&self) -> bool {
+        match self {
+            RewardType::DecodeFiles(_) => true,
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct DecodeFilesReward {
-    files_to_decode: Vec<SingularFileToDecode>,
+    pub files_to_decode: Vec<SingularFileToDecode>,
 }
 impl DecodeFilesReward {
     pub fn get_default()->DecodeFilesReward{
         return DecodeFilesReward { files_to_decode: vec![] }
     }
+    pub fn add_new_file(mut self, mut new_file : SingularFileToDecode) -> DecodeFilesReward{
+        // TODO: encode file and stuff
+
+        return self;
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct SingularFileToDecode {
-    filepath: String,
-    reward_name: String,
+    pub filepath: String,
+    pub reward_name: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -109,15 +121,23 @@ impl RewardCollection {
     pub fn execute_reward(& self)->RewardType{
         match self.reward_type {
             RewardType::DecodeFiles(file_list) => {
-                
+                // TODO: choose file to decode and remove from the list
             },
         };
     }
     pub fn activate_reward(& self)->RewardType{
-        
+        match self.reward_type {
+            RewardType::DecodeFiles(file_list) => {
+                // TODO: choose file to decode and save the fact that the file is being rented
+            },
+        };
     }
     pub fn deactivate_reward(& self)->RewardType{
-        
+        match self.reward_type {
+            RewardType::DecodeFiles(file_list) => {
+                // TODO: encode decoded previously file
+            },
+        };
     }
 }
 pub struct TickResponse {

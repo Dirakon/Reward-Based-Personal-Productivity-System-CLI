@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize, Deserializer, de::IgnoredAny};
 use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
 
-use crate::task;
+use crate::{task, reward, reward_collection::RewardCollection};
 pub fn get_app_state_filepath() -> &'static str {
     return "./state";
 }
@@ -18,6 +18,7 @@ pub fn initialize_default_app_state() {
 pub struct AppState {
     pub cur_points: f64,
     pub tasks: Vec<task::Task>,
+    pub rewards: Vec<RewardCollection>,
     #[serde(default, deserialize_with = "skip", skip_serializing)]
     pub sys:System
 }
@@ -37,6 +38,7 @@ impl AppState {
         return AppState {
             cur_points: (0.0),
             tasks: Vec::new(),
+            rewards: Vec::new(),
             sys:System::new_all()
         };
     }

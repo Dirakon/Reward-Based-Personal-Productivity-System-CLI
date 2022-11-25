@@ -5,15 +5,20 @@ pub mod reward_collection;
 pub mod task;
 
 use app_state::AppState;
+use reward_collection::RewardCollection;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::io;
+use std::iter::Filter;
 use std::path;
 use std::path::Path;
 use sysinfo::{ProcessExt, SystemExt};
 
 use crate::cli_utils::get_parsed_line_with_condition;
+use crate::reward_collection::DecodeFilesReward;
+use crate::reward_collection::RewardType;
+use crate::reward_collection::SingularFileToDecode;
 use crate::task::Task;
 fn main() {
     if !Path::new(app_state::get_app_state_filepath()).exists() {
@@ -37,11 +42,6 @@ fn main() {
         "re" => reward_editing_loop(),
         _ => println!("Incorrect arguments!\n{}", arguments_description),
     }
-
-    // for (pid, process) in state.sys.processes() {
-    //     println!("[{}] {} {:?}", pid, process.name(), process.disk_usage());
-    // }
-    // println!("{}",state.cur_points);
 }
 
 fn reward_editing_loop() {
@@ -114,18 +114,36 @@ fn add_rewards_in_file(mut state: AppState, file_path: &Path, args: &Vec<String>
         file_path.file_name()?.to_str()?.to_string()
     };
 
-    state = reward_addition(state,file_path, args.get(3)?.to_string(), reward_name);
+    state = reward_addition(state,file_path.to_str()?.to_string(), args.get(3)?.to_string(), reward_name)?;
     return Some(state);
 }
-fn reward_addition(state:AppState, file_to_encode: &Path, reward_collection: String, reward_name: String)->AppState {
+fn reward_addition(mut state:AppState, file_to_encode: String, reward_collection: String, reward_name: String)->Option<AppState> {
     println!(
         "Adding reward to {} by name {}: path is {}",
         reward_collection,
         reward_name,
-        file_to_encode.to_string_lossy()
+        file_to_encode
     );
+
+    let collection_to_append = state.rewards.iter_mut().find(
+        |collection| collection.name == reward_collection && collection.reward_type.is_decode_files()
+    )?;
+
+
+    match collection_to_append.reward_type{
+        RewardType::DecodeFiles(decodeFilesRewards)=>{
+            let new_file = SingularFileToDecode{
+                filepath: file_to_encode,
+                reward_name,
+            };
+            collection_to_append.reward_type = RewardType::DecodeFiles(decodeFilesRewards.add_new_file(new_file));
+        }
+        _ =>{
+            panic!("An impossible branch! Because of the find conditions above, here we should see only DecodeFiles collections.")
+        }
+    }
     //TODO: actually add rewards
-    return state;
+    return Some(state);
 }
 
 fn edit_tasks(state: &mut AppState) {
@@ -178,5 +196,47 @@ fn edit_tasks(state: &mut AppState) {
 }
 
 fn edit_rewards(state: &mut AppState){
+    if !state.rewards.is_empty() {
+        println!("Rewards: ");
+        for i in 0..state.rewards.len() {
+            println!("---Reward #{}---", i + 1);
+            println!("{}", state.rewards[i]);
+        }
+        println!("------");
+    }
+    let prompt = if state.rewards.is_empty() {
+        "1 - add reward"
+    } else {
+        "1 - add reward\n2 - remove reward\n3 - tick reward"
+    };
 
+    match get_parsed_line_with_condition(Some(prompt), |int_val| {
+        return (*int_val == 2 && !state.rewards.is_empty())
+            || (*int_val == 3 && !state.rewards.is_empty())
+            || *int_val == 1;
+    }) {
+        3 => {
+            // Tick reward
+            let index_to_tick: usize = get_parsed_line_with_condition(
+                Some("Enter index of reward to tick: "),
+                |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
+            ) - 1;
+            let tick_response = state.rewards[index_to_tick].tick_reward();
+            state.cur_points -= tick_response.points_spent;
+        }
+        2 => {
+            // Remove reward
+            let index_to_remove: usize = get_parsed_line_with_condition(
+                Some("Enter index of reward to remove: "),
+                |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
+            ) - 1;
+
+            state.rewards.remove(index_to_remove);
+        }
+        _ => {
+            // Add reward
+            let new_reward = RewardCollection::init_rewards_from_cli();
+            state.rewards.push(new_reward);
+        }
+    }
 }
