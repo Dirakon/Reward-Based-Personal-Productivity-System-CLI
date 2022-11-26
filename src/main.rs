@@ -1,8 +1,12 @@
 pub mod app_state;
 pub mod cli_utils;
-pub mod reward;
+pub mod crypto_utils;
+pub mod io_utils;
 pub mod reward_collection;
 pub mod task;
+
+#[macro_use]
+extern crate fstrings;
 
 use app_state::AppState;
 use reward_collection::RewardCollection;
@@ -16,6 +20,9 @@ use std::path::Path;
 use sysinfo::{ProcessExt, SystemExt};
 
 use crate::cli_utils::get_parsed_line_with_condition;
+use crate::crypto_utils::make_key;
+use crate::io_utils::decode_file;
+use crate::io_utils::encode_file;
 use crate::reward_collection::DecodeFilesReward;
 use crate::reward_collection::RewardType;
 use crate::reward_collection::SingularFileToDecode;
@@ -24,7 +31,7 @@ fn main() {
     if !Path::new(app_state::get_app_state_filepath()).exists() {
         app_state::initialize_default_app_state();
     }
-
+    
     let args: Vec<String> = env::args().collect();
     let arguments_description = "\tte - opens in task editing mode, with task ticking and such.\n\tef - encodes file for reward in the given reward collection (default name is the file name)\n\t\tArg1: \"*path to file or directory to be encoded*\" \n\t\tArg2: \"*reward collection*\" \n\t\tArg3: \"*reward name (optional)*\"\n\tre - opens in reward editing mode, where you can buy/edit rewards";
     println!("{:?}", args);
@@ -107,42 +114,52 @@ fn add_rewards_in_folder(
     return Ok(state);
 }
 
-fn add_rewards_in_file(mut state: AppState, file_path: &Path, args: &Vec<String>) -> Option<AppState> {
+fn add_rewards_in_file(
+    mut state: AppState,
+    file_path: &Path,
+    args: &Vec<String>,
+) -> Option<AppState> {
     let reward_name = if args.len() >= 5 {
         args[4].clone()
     } else {
         file_path.file_name()?.to_str()?.to_string()
     };
 
-    state = reward_addition(state,file_path.to_str()?.to_string(), args.get(3)?.to_string(), reward_name)?;
+    state = reward_addition(
+        state,
+        file_path.to_str()?.to_string(),
+        args.get(3)?.to_string(),
+        reward_name,
+    )?;
     return Some(state);
 }
-fn reward_addition(mut state:AppState, file_to_encode: String, reward_collection: String, reward_name: String)->Option<AppState> {
+fn reward_addition(
+    mut state: AppState,
+    file_to_encode: String,
+    reward_collection: String,
+    reward_name: String,
+) -> Option<AppState> {
     println!(
         "Adding reward to {} by name {}: path is {}",
-        reward_collection,
-        reward_name,
-        file_to_encode
+        reward_collection, reward_name, file_to_encode
     );
 
-    let collection_to_append = state.rewards.iter_mut().find(
-        |collection| collection.name == reward_collection && collection.reward_type.is_decode_files()
-    )?;
+    let collection_to_append = state.rewards.iter_mut().find(|collection| {
+        collection.name == reward_collection && collection.reward_type.is_decode_files()
+    })?;
 
-
-    match collection_to_append.reward_type{
-        RewardType::DecodeFiles(decodeFilesRewards)=>{
-            let new_file = SingularFileToDecode{
+    match &mut collection_to_append.reward_type {
+        RewardType::DecodeFiles(decode_files_rewards) => {
+            let new_file = SingularFileToDecode {
                 filepath: file_to_encode,
                 reward_name,
             };
-            collection_to_append.reward_type = RewardType::DecodeFiles(decodeFilesRewards.add_new_file(new_file));
+            decode_files_rewards.add_new_file(new_file);
         }
-        _ =>{
+        _ => {
             panic!("An impossible branch! Because of the find conditions above, here we should see only DecodeFiles collections.")
         }
-    }
-    //TODO: actually add rewards
+    };
     return Some(state);
 }
 
@@ -195,7 +212,7 @@ fn edit_tasks(state: &mut AppState) {
     }
 }
 
-fn edit_rewards(state: &mut AppState){
+fn edit_rewards(state: &mut AppState) {
     if !state.rewards.is_empty() {
         println!("Rewards: ");
         for i in 0..state.rewards.len() {

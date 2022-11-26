@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use serde::{Deserialize, Serialize, Deserializer, de::IgnoredAny};
+use serde::{de::IgnoredAny, Deserialize, Deserializer, Serialize};
 use sysinfo::{NetworkExt, NetworksExt, ProcessExt, System, SystemExt};
 
-use crate::{task, reward, reward_collection::RewardCollection};
+use crate::{crypto_utils, reward_collection::RewardCollection, task};
 pub fn get_app_state_filepath() -> &'static str {
     return "./state";
 }
@@ -20,7 +20,7 @@ pub struct AppState {
     pub tasks: Vec<task::Task>,
     pub rewards: Vec<RewardCollection>,
     #[serde(default, deserialize_with = "skip", skip_serializing)]
-    pub sys:System
+    pub sys: System,
 }
 
 fn skip<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -39,17 +39,17 @@ impl AppState {
             cur_points: (0.0),
             tasks: Vec::new(),
             rewards: Vec::new(),
-            sys:System::new_all()
+            sys: System::new_all(),
         };
     }
 
     pub fn load_app_state() -> AppState {
         let contents = fs::read_to_string(get_app_state_filepath()).expect("read from file failed");
-        let mut state:AppState = serde_json::from_str(&contents).unwrap();
+        let mut state: AppState = serde_json::from_str(&contents).unwrap();
         state.sys.refresh_all();
         return state;
     }
-    
+
     pub fn update_app_state(&self) {
         fs::write(
             get_app_state_filepath(),
@@ -57,5 +57,4 @@ impl AppState {
         )
         .expect("write to file failed");
     }
-    
 }

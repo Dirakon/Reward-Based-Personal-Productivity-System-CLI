@@ -48,11 +48,12 @@ impl Task {
     pub fn tick_task(&mut self) -> TickResponse {
         match self.reward_system {
             RewardPointTransferProtocol::HourlyTransfer(starting_date) => {
-                self.reward_system = RewardPointTransferProtocol::HourlyTransfer(if starting_date.is_some() {
-                    None
-                } else {
-                    Some(Local::now())
-                });
+                self.reward_system =
+                    RewardPointTransferProtocol::HourlyTransfer(if starting_date.is_some() {
+                        None
+                    } else {
+                        Some(Local::now())
+                    });
                 match starting_date {
                     Some(date) => {
                         return TickResponse {

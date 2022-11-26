@@ -2,11 +2,11 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
+use crate::crypto_utils;
 use crate::task::RewardPointTransferProtocol;
 use chrono;
 use chrono::DateTime;
 use chrono::Local;
-
 
 use crate::cli_utils::{
     self, get_line, get_line_with_condition, get_parsed_line, get_parsed_line_with_condition,
@@ -22,20 +22,47 @@ impl RewardType {
             RewardType::DecodeFiles(_) => true,
         }
     }
+
+    pub fn execute_reward(&mut self) {
+        match self {
+            RewardType::DecodeFiles(reward) => {
+                reward.files_to_decode.remove(0);
+                // TODO: choose file to decode and remove from the list
+            }
+        };
+    }
+    pub fn activate_reward(&mut self) {
+        match self {
+            RewardType::DecodeFiles(reward) => {
+                return todo!();
+                // TODO: choose file to decode and save the fact that the file is being rented
+            }
+        };
+    }
+    pub fn deactivate_reward(&mut self) {
+        match self {
+            RewardType::DecodeFiles(reward) => {
+                return todo!();
+                // TODO: encode decoded previously file
+            }
+        };
+    }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct DecodeFilesReward {
     pub files_to_decode: Vec<SingularFileToDecode>,
+    pub key: crypto_utils::Key,
 }
 impl DecodeFilesReward {
-    pub fn get_default()->DecodeFilesReward{
-        return DecodeFilesReward { files_to_decode: vec![] }
+    pub fn get_default() -> DecodeFilesReward {
+        return DecodeFilesReward {
+            files_to_decode: vec![],
+            key: crypto_utils::make_key(),
+        };
     }
-    pub fn add_new_file(mut self, mut new_file : SingularFileToDecode) -> DecodeFilesReward{
-        // TODO: encode file and stuff
-
-        return self;
+    pub fn add_new_file(&mut self, mut new_file: SingularFileToDecode) {
+        // TODO: encode file and add it's info
     }
 }
 
@@ -51,7 +78,7 @@ pub struct RewardCollection {
     pub description: String,
     pub reward_type: RewardType,
     pub cost: f64,
-    pub spending_protocol:RewardPointTransferProtocol
+    pub spending_protocol: RewardPointTransferProtocol,
 }
 
 impl RewardCollection {
@@ -70,11 +97,10 @@ impl RewardCollection {
 
         let reward_type = match get_parsed_line_with_condition(
             Some("Choose reward type: \n1 - decode files"),
-            |int_val:&i64| *int_val == 1,
+            |int_val: &i64| *int_val == 1,
         ) {
             _ => RewardType::DecodeFiles(DecodeFilesReward::get_default()),
         };
-
 
         return RewardCollection {
             spending_protocol,
@@ -84,60 +110,37 @@ impl RewardCollection {
             reward_type,
         };
     }
-    pub fn tick_reward(&mut self)->TickResponse{
+    pub fn tick_reward(&mut self) -> TickResponse {
         match self.spending_protocol {
             RewardPointTransferProtocol::HourlyTransfer(starting_date) => {
-                self.spending_protocol = RewardPointTransferProtocol::HourlyTransfer(if starting_date.is_some() {
-                    None
-                } else {
-                    Some(Local::now())
-                });
+                self.spending_protocol =
+                    RewardPointTransferProtocol::HourlyTransfer(if starting_date.is_some() {
+                        None
+                    } else {
+                        Some(Local::now())
+                    });
                 match starting_date {
                     Some(date) => {
-                        self.reward_type = self.deactivate_reward();
+                        self.reward_type.deactivate_reward();
                         return TickResponse {
                             points_spent: (Local::now().signed_duration_since(date).num_minutes()
                                 as f64)
                                 * (self.cost / 60.0),
-                        }
+                        };
                     }
                     None => {
-                        self.reward_type = self.activate_reward();
-                        return TickResponse {
-                            points_spent: 0.0,
-                        }
+                        self.reward_type.activate_reward();
+                        return TickResponse { points_spent: 0.0 };
                     }
                 }
             }
             RewardPointTransferProtocol::SingularTransfer => {
-                self.reward_type = self.execute_reward();
+                self.reward_type.execute_reward();
                 return TickResponse {
                     points_spent: self.cost,
                 };
             }
         }
-        
-    }
-    pub fn execute_reward(& self)->RewardType{
-        match self.reward_type {
-            RewardType::DecodeFiles(file_list) => {
-                // TODO: choose file to decode and remove from the list
-            },
-        };
-    }
-    pub fn activate_reward(& self)->RewardType{
-        match self.reward_type {
-            RewardType::DecodeFiles(file_list) => {
-                // TODO: choose file to decode and save the fact that the file is being rented
-            },
-        };
-    }
-    pub fn deactivate_reward(& self)->RewardType{
-        match self.reward_type {
-            RewardType::DecodeFiles(file_list) => {
-                // TODO: encode decoded previously file
-            },
-        };
     }
 }
 pub struct TickResponse {
@@ -163,7 +166,7 @@ impl Display for RewardCollection {
         return write!(
             f,
             "name: {}\ndescription: {}\nreward system description: {}\ntype:{}",
-            self.name, self.description, reward_system_description,self.reward_type
+            self.name, self.description, reward_system_description, self.reward_type
         );
     }
 }
@@ -173,10 +176,6 @@ impl Display for RewardType {
         let type_description = match self {
             RewardType::DecodeFiles(_) => "Decode files",
         };
-        return write!(
-            f,
-            "{}",
-            type_description
-        );
+        return write!(f, "{}", type_description);
     }
 }
