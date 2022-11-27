@@ -71,7 +71,7 @@ fn task_editing_loop() {
 }
 
 fn start_reward_addition(args: Vec<String>) -> Option<()> {
-    let state = AppState::load_app_state();
+    let mut state = AppState::load_app_state();
 
     let path_as_string = args.get(2)?.clone();
     let path_to_file = Path::new(&path_as_string);
@@ -80,12 +80,13 @@ fn start_reward_addition(args: Vec<String>) -> Option<()> {
     }
     if path_to_file.is_dir() {
         match add_rewards_in_folder(state, path_to_file, &args) {
-            Err(err) => println!("{:?}", err),
-            _ => (),
+            Err(err) => panic!("{:?}", err),
+            Ok(new_state) => state = new_state,
         };
     } else {
-        add_rewards_in_file(state, path_to_file, &args);
+        state = add_rewards_in_file(state, path_to_file, &args)?;
     }
+    state.update_app_state();
     return Some(());
 }
 
@@ -223,13 +224,15 @@ fn edit_rewards(state: &mut AppState) {
     }
     let prompt = if state.rewards.is_empty() {
         "1 - add reward"
-    } else {
+    } else if state.cur_points <= 0.0{
+        "1 - add reward\n2 - remove reward"
+    }else{
         "1 - add reward\n2 - remove reward\n3 - tick reward"
     };
 
     match get_parsed_line_with_condition(Some(prompt), |int_val| {
         return (*int_val == 2 && !state.rewards.is_empty())
-            || (*int_val == 3 && !state.rewards.is_empty())
+            || (*int_val == 3 && !state.rewards.is_empty() && state.cur_points > 0.0)
             || *int_val == 1;
     }) {
         3 => {

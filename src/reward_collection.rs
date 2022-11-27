@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 
 use crate::crypto_utils;
+use crate::io_utils::decode_file;
+use crate::io_utils::encode_file;
 use crate::task::RewardPointTransferProtocol;
 use chrono;
 use chrono::DateTime;
@@ -20,32 +22,41 @@ impl RewardType {
     pub fn is_decode_files(&self) -> bool {
         match self {
             RewardType::DecodeFiles(_) => true,
+            _ => false,
         }
     }
 
-    pub fn execute_reward(&mut self) {
+    pub fn execute_reward(&mut self) -> Option<()> {
         match self {
             RewardType::DecodeFiles(reward) => {
-                reward.files_to_decode.remove(0);
-                // TODO: choose file to decode and remove from the list
+                let file_index = reward.choose_file("Enter index of file to decode: ")?;
+                decode_file(&reward.key, &reward.files_to_decode[file_index].filepath);
+                reward.files_to_decode.remove(file_index);
             }
         };
+        return Some(());
     }
-    pub fn activate_reward(&mut self) {
+    pub fn activate_reward(&mut self) -> Option<()> {
         match self {
             RewardType::DecodeFiles(reward) => {
-                return todo!();
-                // TODO: choose file to decode and save the fact that the file is being rented
+                let file_index = reward.choose_file("Enter index of file to rent: ")?;
+                reward.currently_decoded_file_index = Some(file_index);
+                decode_file(&reward.key, &reward.files_to_decode[file_index].filepath);
             }
         };
+        return Some(());
     }
-    pub fn deactivate_reward(&mut self) {
+    pub fn deactivate_reward(&mut self) -> Option<()> {
         match self {
             RewardType::DecodeFiles(reward) => {
-                return todo!();
-                // TODO: encode decoded previously file
+                let file_index = reward
+                    .currently_decoded_file_index
+                    .expect("No file is decoded even though reward is being deactivated!");
+                encode_file(&reward.key, &reward.files_to_decode[file_index].filepath);
+                reward.currently_decoded_file_index = None;
             }
         };
+        return Some(());
     }
 }
 
@@ -53,16 +64,31 @@ impl RewardType {
 pub struct DecodeFilesReward {
     pub files_to_decode: Vec<SingularFileToDecode>,
     pub key: crypto_utils::Key,
+    pub currently_decoded_file_index: Option<usize>,
 }
 impl DecodeFilesReward {
     pub fn get_default() -> DecodeFilesReward {
         return DecodeFilesReward {
             files_to_decode: vec![],
             key: crypto_utils::make_key(),
+            currently_decoded_file_index: None,
         };
     }
-    pub fn add_new_file(&mut self, mut new_file: SingularFileToDecode) {
-        // TODO: encode file and add it's info
+    pub fn add_new_file(&mut self, new_file: SingularFileToDecode) {
+        encode_file(&self.key, &new_file.filepath);
+        self.files_to_decode.push(new_file);
+    }
+    pub fn choose_file(&self, prompt: &str) -> Option<usize> {
+        if self.files_to_decode.is_empty() {
+            return None;
+        }
+        for i in 0..self.files_to_decode.len() {
+            println!("{}.\t{}", i + 1, self.files_to_decode[i]);
+        }
+        let file_index: usize = get_parsed_line_with_condition(Some(prompt), |int_val: &usize| {
+            *int_val > 0 && *int_val <= self.files_to_decode.len()
+        }) - 1;
+        return Some(file_index);
     }
 }
 
@@ -70,6 +96,12 @@ impl DecodeFilesReward {
 pub struct SingularFileToDecode {
     pub filepath: String,
     pub reward_name: String,
+}
+
+impl Display for SingularFileToDecode {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        return write!(f, "{} --- {}", self.reward_name, self.filepath);
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,7 +115,6 @@ pub struct RewardCollection {
 
 impl RewardCollection {
     pub fn init_rewards_from_cli() -> RewardCollection {
-        chrono::Local::now();
         let name = get_line(Some("Enter the name of the reward: "));
         let description = get_line(Some("Enter the description of the reward: "));
         let spending_protocol = match get_parsed_line_with_condition(
@@ -111,17 +142,15 @@ impl RewardCollection {
         };
     }
     pub fn tick_reward(&mut self) -> TickResponse {
+        let no_action_response = TickResponse { points_spent: 0.0 };
         match self.spending_protocol {
             RewardPointTransferProtocol::HourlyTransfer(starting_date) => {
-                self.spending_protocol =
-                    RewardPointTransferProtocol::HourlyTransfer(if starting_date.is_some() {
-                        None
-                    } else {
-                        Some(Local::now())
-                    });
                 match starting_date {
                     Some(date) => {
-                        self.reward_type.deactivate_reward();
+                        if self.reward_type.deactivate_reward().is_none() {
+                            return no_action_response;
+                        };
+                        self.spending_protocol = RewardPointTransferProtocol::HourlyTransfer(None);
                         return TickResponse {
                             points_spent: (Local::now().signed_duration_since(date).num_minutes()
                                 as f64)
@@ -129,13 +158,18 @@ impl RewardCollection {
                         };
                     }
                     None => {
-                        self.reward_type.activate_reward();
+                        if self.reward_type.activate_reward().is_none() {
+                            return no_action_response;
+                        };
+                        self.spending_protocol = RewardPointTransferProtocol::HourlyTransfer(Some(Local::now()));
                         return TickResponse { points_spent: 0.0 };
                     }
                 }
             }
             RewardPointTransferProtocol::SingularTransfer => {
-                self.reward_type.execute_reward();
+                if self.reward_type.execute_reward().is_none() {
+                    return no_action_response;
+                };
                 return TickResponse {
                     points_spent: self.cost,
                 };
