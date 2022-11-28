@@ -10,7 +10,7 @@ pub fn get_app_state_filepath() -> &'static str {
 }
 
 pub fn initialize_default_app_state() {
-    AppState::get_default().update_app_state();
+    AppState::get_default().save_on_disk();
 }
 
 #[derive(Serialize, Deserialize)]
@@ -43,14 +43,14 @@ impl AppState {
         };
     }
 
-    pub fn load_app_state() -> AppState {
+    pub fn load_from_disk() -> AppState {
         let contents = fs::read_to_string(get_app_state_filepath()).expect("read from file failed");
         let mut state: AppState = serde_json::from_str(&contents).unwrap();
         state.sys.refresh_all();
         return state;
     }
 
-    pub fn update_app_state(&self) {
+    pub fn save_on_disk(&self) {
         fs::write(
             get_app_state_filepath(),
             serde_json::to_string(&self).unwrap(),

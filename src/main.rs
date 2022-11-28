@@ -31,7 +31,7 @@ fn main() {
     if !Path::new(app_state::get_app_state_filepath()).exists() {
         app_state::initialize_default_app_state();
     }
-    
+
     let args: Vec<String> = env::args().collect();
     let arguments_description = "\tte - opens in task editing mode, with task ticking and such.\n\tef - encodes file for reward in the given reward collection (default name is the file name)\n\t\tArg1: \"*path to file or directory to be encoded*\" \n\t\tArg2: \"*reward collection*\" \n\t\tArg3: \"*reward name (optional)*\"\n\tre - opens in reward editing mode, where you can buy/edit rewards";
     println!("{:?}", args);
@@ -41,42 +41,38 @@ fn main() {
     }
     match args[1].as_str() {
         "te" => task_editing_loop(),
-        "ef" => {
-            if start_reward_addition(args).is_none() {
-                println!("Incorrect arguments!\n{}", arguments_description);
-            }
-        }
+        "ef" => start_reward_addition(args),
         "re" => reward_editing_loop(),
         _ => println!("Incorrect arguments!\n{}", arguments_description),
     }
 }
 
 fn reward_editing_loop() {
-    let mut state = app_state::AppState::load_app_state();
+    let mut state = app_state::AppState::load_from_disk();
     loop {
         println!("\n\n\n");
         println!("Points: {}", state.cur_points);
         edit_rewards(&mut state);
-        state.update_app_state();
+        state.save_on_disk();
     }
 }
 fn task_editing_loop() {
-    let mut state = app_state::AppState::load_app_state();
+    let mut state = app_state::AppState::load_from_disk();
     loop {
         println!("\n\n\n");
         println!("Points: {}", state.cur_points);
         edit_tasks(&mut state);
-        state.update_app_state();
+        state.save_on_disk();
     }
 }
 
-fn start_reward_addition(args: Vec<String>) -> Option<()> {
-    let mut state = AppState::load_app_state();
+fn start_reward_addition(args: Vec<String>) {
+    let mut state = AppState::load_from_disk();
 
-    let path_as_string = args.get(2)?.clone();
+    let path_as_string = args.get(2).expect("Missing file path argument!").clone();
     let path_to_file = Path::new(&path_as_string);
     if !path_to_file.exists() {
-        return None;
+        panic!("Path {} does not exists!", path_as_string);
     }
     if path_to_file.is_dir() {
         match add_rewards_in_folder(state, path_to_file, &args) {
@@ -84,10 +80,9 @@ fn start_reward_addition(args: Vec<String>) -> Option<()> {
             Ok(new_state) => state = new_state,
         };
     } else {
-        state = add_rewards_in_file(state, path_to_file, &args)?;
+        state = add_rewards_in_file(state, path_to_file, &args);
     }
-    state.update_app_state();
-    return Some(());
+    state.save_on_disk();
 }
 
 fn add_rewards_in_folder(
@@ -101,53 +96,61 @@ fn add_rewards_in_folder(
         if path.is_dir() {
             state = add_rewards_in_folder(state, &path, args)?;
         } else {
-            match add_rewards_in_file(state, &entry.path(), args) {
-                Some(new_state) => state = new_state,
-                None => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "problems working with specific file",
-                    ))
-                }
-            };
+            state = add_rewards_in_file(state, &entry.path(), args);
         }
     }
     return Ok(state);
 }
 
-fn add_rewards_in_file(
-    mut state: AppState,
-    file_path: &Path,
-    args: &Vec<String>,
-) -> Option<AppState> {
+fn add_rewards_in_file(mut state: AppState, file_path: &Path, args: &Vec<String>) -> AppState {
     let reward_name = if args.len() >= 5 {
         args[4].clone()
     } else {
-        file_path.file_name()?.to_str()?.to_string()
+        file_path
+            .file_name()
+            .expect(&f!("Could not get file name of {:?}", file_path))
+            .to_str()
+            .expect(&f!(
+                "Could not convert file name of {:?} to string",
+                file_path
+            ))
+            .to_string()
     };
 
     state = reward_addition(
         state,
-        file_path.to_str()?.to_string(),
-        args.get(3)?.to_string(),
+        file_path
+            .to_str()
+            .expect(&f!("Could not convert path {:?} to string", file_path))
+            .to_string(),
+        args.get(3)
+            .expect("Missing collection name argument!")
+            .to_string(),
         reward_name,
-    )?;
-    return Some(state);
+    );
+    return state;
 }
 fn reward_addition(
     mut state: AppState,
     file_to_encode: String,
     reward_collection: String,
     reward_name: String,
-) -> Option<AppState> {
+) -> AppState {
     println!(
         "Adding reward to {} by name {}: path is {}",
         reward_collection, reward_name, file_to_encode
     );
 
-    let collection_to_append = state.rewards.iter_mut().find(|collection| {
-        collection.name == reward_collection && collection.reward_type.is_decode_files()
-    })?;
+    let collection_to_append = state
+        .rewards
+        .iter_mut()
+        .find(|collection| {
+            collection.name == reward_collection && collection.reward_type.is_decode_files()
+        })
+        .expect(&f!(
+            "Could not find decodeFiles collection by name {}",
+            reward_collection
+        ));
 
     match &mut collection_to_append.reward_type {
         RewardType::DecodeFiles(decode_files_rewards) => {
@@ -161,7 +164,7 @@ fn reward_addition(
             panic!("An impossible branch! Because of the find conditions above, here we should see only DecodeFiles collections.")
         }
     };
-    return Some(state);
+    return state;
 }
 
 fn edit_tasks(state: &mut AppState) {
@@ -224,9 +227,9 @@ fn edit_rewards(state: &mut AppState) {
     }
     let prompt = if state.rewards.is_empty() {
         "1 - add reward"
-    } else if state.cur_points <= 0.0{
+    } else if state.cur_points <= 0.0 {
         "1 - add reward\n2 - remove reward"
-    }else{
+    } else {
         "1 - add reward\n2 - remove reward\n3 - tick reward"
     };
 
