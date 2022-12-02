@@ -9,14 +9,33 @@ use crate::crypto_utils::{decrypt, encrypt, Key};
 
 pub fn encode_file(key: &Key, path: &String) {
     let mut file_bytes = fs::read(path).expect(&f!("Could not read file {} bytewise!", &path));
-    encrypt(key, &mut file_bytes);
-    fs::write(&path, file_bytes).expect(&f!("Could not write to file {} bytewise!", &path));
+
+    // unneeded since compressing/decompressing data is sufficient for now
+    // encrypt(key, &mut file_bytes);
+
+    let mut encoded_file_bytes = Vec::new();
+    let mut encoder = zstd::stream::Encoder::new(&mut encoded_file_bytes, 1).unwrap();
+
+    io::copy(&mut file_bytes.as_slice(), &mut encoder).unwrap();
+    encoder.finish().unwrap();
+
+    fs::write(&path, encoded_file_bytes).expect(&f!("Could not write to file {} bytewise!", &path));
 }
 
 pub fn decode_file(key: &Key, path: &String) {
     let mut file_bytes = fs::read(&path).expect(&f!("Could not read file {} bytewise!", &path));
-    decrypt(key, &mut file_bytes);
-    fs::write(&path, file_bytes).expect(&f!("Could not write to file {} bytewise!", &path));
+
+    let mut decoded_file_bytes = Vec::new();
+    let mut binding = file_bytes.as_slice();
+    let mut decoder = zstd::stream::Decoder::new(&mut binding).unwrap();
+
+    io::copy(&mut decoder, &mut decoded_file_bytes).unwrap();
+    decoder.finish();
+
+    // unneeded since compressing/decompressing data is sufficient for now
+    // decrypt(key, &mut decoded_file_bytes);
+
+    fs::write(&path, decoded_file_bytes).expect(&f!("Could not write to file {} bytewise!", &path));
 }
 
 pub fn encode_file_unstable(key: &Key, path: &String) {
