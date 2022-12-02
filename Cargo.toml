@@ -13,3 +13,4 @@ sysinfo="0.26.7"
 chrono={version = "0.4.23", features =["serde"]}
 ring="0.16.20"
 fstrings="0.2.3"
+zip = "0.6.3"
