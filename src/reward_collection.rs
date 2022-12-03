@@ -176,6 +176,41 @@ impl RewardCollection {
             }
         }
     }
+
+    pub fn validate(&mut self) {
+        match &mut self.reward_type {
+            RewardType::DecodeFiles(decode_files_reward) => {
+                let mut current_index_pre_retain = 0;
+                decode_files_reward.files_to_decode.retain(
+                    |file|{
+                        let path = std::path::Path::new(&file.filepath);
+                        if !path.exists(){
+                            println!("File by path {} in reward collection {} does not exist anymore! Removing it...",
+                            &file.filepath, self.name);
+                            decode_files_reward.currently_decoded_file_index = match decode_files_reward.currently_decoded_file_index{
+                                Some(index_in_question) => 
+                                    if index_in_question == current_index_pre_retain{
+                                        None
+                                    }else if index_in_question > current_index_pre_retain{
+                                        Some(index_in_question-1)
+                                    }else{
+                                        Some(index_in_question)
+                                    }
+                                ,
+                                None => None,
+                            };
+
+
+                            current_index_pre_retain+=1;
+                            return false;
+                        }
+                        current_index_pre_retain+=1;
+                        return true;
+                    }
+                );
+            },
+        }
+    }
 }
 pub struct TickResponse {
     pub points_spent: f64,

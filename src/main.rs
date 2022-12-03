@@ -42,9 +42,18 @@ fn main() {
     match args[1].as_str() {
         "te" => task_editing_loop(),
         "ef" => start_reward_addition(args),
-        "re" => reward_editing_loop(),
+        "re" => {
+            validate_rewards();
+            reward_editing_loop();
+        },
         _ => println!("Incorrect arguments!\n{}", arguments_description),
     }
+}
+
+fn validate_rewards(){
+    let mut state = app_state::AppState::load_from_disk();
+    state.rewards.iter_mut().for_each(|reward| reward.validate());
+    state.save_on_disk();
 }
 
 fn reward_editing_loop() {
