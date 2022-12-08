@@ -1,13 +1,37 @@
+use rand::Rng;
 use std::{
     fs,
     io::{self, Read, Write},
 };
-
 use zip::{result::ZipResult, write::FileOptions};
 
 use crate::crypto_utils::{decrypt, encrypt, Key};
 
-pub fn encode_file(key: &Key, path: &String) {
+pub fn generate_name() -> String {
+    let possible_characters: Vec<char> = "abcdefghijklmnopqrstuvwxyz".chars().collect();
+    let rng = rand::thread_rng();
+    let filename_size = rng.gen_range(3..20);
+    let name: String = (0..filename_size)
+        .map(|_| possible_characters[rng.gen_range(0..possible_characters.len())])
+        .collect();
+    return name;
+}
+
+pub fn encode_file_by_moving(folder_pool: Vec<String>, path: &String) -> String {
+    let rng = rand::thread_rng();
+    let new_path = folder_pool[rng.gen_range(0..folder_pool.len())] + &generate_name();
+    fs::rename(path, new_path).expect(&f!("Couldn't move file {} back to {}!", path, new_path));
+    return new_path;
+}
+pub fn decode_file_from_moving(current_path: &String, initial_path: &String) {
+    fs::rename(current_path, initial_path).expect(&f!(
+        "Couldn't move file {} back to {}!",
+        current_path,
+        initial_path
+    ));
+}
+
+pub fn encode_file_by_compression(key: &Key, path: &String) {
     let mut file_bytes = fs::read(path).expect(&f!("Could not read file {} bytewise!", &path));
 
     // unneeded since compressing/decompressing data is sufficient for now
@@ -22,7 +46,7 @@ pub fn encode_file(key: &Key, path: &String) {
     fs::write(&path, encoded_file_bytes).expect(&f!("Could not write to file {} bytewise!", &path));
 }
 
-pub fn decode_file(key: &Key, path: &String) {
+pub fn decode_file_from_compression(key: &Key, path: &String) {
     let mut file_bytes = fs::read(&path).expect(&f!("Could not read file {} bytewise!", &path));
 
     let mut decoded_file_bytes = Vec::new();

@@ -45,14 +45,17 @@ fn main() {
         "re" => {
             validate_rewards();
             reward_editing_loop();
-        },
+        }
         _ => println!("Incorrect arguments!\n{}", arguments_description),
     }
 }
 
-fn validate_rewards(){
+fn validate_rewards() {
     let mut state = app_state::AppState::load_from_disk();
-    state.rewards.iter_mut().for_each(|reward| reward.validate());
+    state
+        .rewards
+        .iter_mut()
+        .for_each(|reward| reward.validate());
     state.save_on_disk();
 }
 
@@ -153,26 +156,27 @@ fn reward_addition(
     let collection_to_append = state
         .rewards
         .iter_mut()
-        .find(|collection| {
-            collection.name == reward_collection && collection.reward_type.is_decode_files()
+        .find_map(|collection| {
+            if collection.name == reward_collection {
+                match &mut collection.reward_type {
+                    RewardType::DecodeFiles(decode_files_reward) => Some(decode_files_reward),
+                    _ => None
+                }
+            } else {
+                None
+            }
         })
         .expect(&f!(
             "Could not find decodeFiles collection by name {}",
             reward_collection
         ));
 
-    match &mut collection_to_append.reward_type {
-        RewardType::DecodeFiles(decode_files_rewards) => {
-            let new_file = SingularFileToDecode {
-                filepath: file_to_encode,
-                reward_name,
-            };
-            decode_files_rewards.add_new_file(new_file);
-        }
-        _ => {
-            panic!("An impossible branch! Because of the find conditions above, here we should see only DecodeFiles collections.")
-        }
+    let new_file = SingularFileToDecode {
+        filepath: file_to_encode,
+        reward_name,
     };
+    collection_to_append.add_new_file(new_file);
+
     return state;
 }
 
@@ -197,32 +201,40 @@ fn edit_tasks(state: &mut AppState) {
             || *int_val == 1;
     }) {
         3 => {
-            // Tick task
-            let index_to_tick: usize = get_parsed_line_with_condition(
-                Some("Enter index of task to tick: "),
-                |int_val: &usize| *int_val > 0 && *int_val <= state.tasks.len(),
-            ) - 1;
-            let tick_response = state.tasks[index_to_tick].tick_task();
-            if tick_response.task_is_to_be_removed {
-                state.tasks.remove(index_to_tick);
-            }
-            state.cur_points += tick_response.reward_acquired;
+            tick_task(state);
         }
         2 => {
-            // Remove task
-            let index_to_remove: usize = get_parsed_line_with_condition(
-                Some("Enter index of task to remove: "),
-                |int_val: &usize| *int_val > 0 && *int_val <= state.tasks.len(),
-            ) - 1;
-
-            state.tasks.remove(index_to_remove);
+            remove_task(state);
         }
         _ => {
-            // Add task
-            let new_task = Task::init_task_from_cli();
-            state.tasks.push(new_task);
+            add_task(state);
         }
     }
+}
+
+fn add_task(state: &mut AppState) {
+    let new_task = Task::init_task_from_cli();
+    state.tasks.push(new_task);
+}
+
+fn remove_task(state: &mut AppState) {
+    let index_to_remove: usize = get_parsed_line_with_condition(
+        Some("Enter index of task to remove: "),
+        |int_val: &usize| *int_val > 0 && *int_val <= state.tasks.len(),
+    ) - 1;
+    state.tasks.remove(index_to_remove);
+}
+
+fn tick_task(state: &mut AppState) {
+    let index_to_tick: usize =
+        get_parsed_line_with_condition(Some("Enter index of task to tick: "), |int_val: &usize| {
+            *int_val > 0 && *int_val <= state.tasks.len()
+        }) - 1;
+    let tick_response = state.tasks[index_to_tick].tick_task();
+    if tick_response.task_is_to_be_removed {
+        state.tasks.remove(index_to_tick);
+    }
+    state.cur_points += tick_response.reward_acquired;
 }
 
 fn edit_rewards(state: &mut AppState) {
@@ -248,27 +260,35 @@ fn edit_rewards(state: &mut AppState) {
             || *int_val == 1;
     }) {
         3 => {
-            // Tick reward
-            let index_to_tick: usize = get_parsed_line_with_condition(
-                Some("Enter index of reward to tick: "),
-                |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
-            ) - 1;
-            let tick_response = state.rewards[index_to_tick].tick_reward();
-            state.cur_points -= tick_response.points_spent;
+            tick_reward(state);
         }
         2 => {
-            // Remove reward
-            let index_to_remove: usize = get_parsed_line_with_condition(
-                Some("Enter index of reward to remove: "),
-                |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
-            ) - 1;
-
-            state.rewards.remove(index_to_remove);
+            remove_reward(state);
         }
         _ => {
-            // Add reward
-            let new_reward = RewardCollection::init_rewards_from_cli();
-            state.rewards.push(new_reward);
+            add_reward(state);
         }
     }
+}
+
+fn add_reward(state: &mut AppState) {
+    let new_reward = RewardCollection::init_rewards_from_cli();
+    state.rewards.push(new_reward);
+}
+
+fn remove_reward(state: &mut AppState) {
+    let index_to_remove: usize = get_parsed_line_with_condition(
+        Some("Enter index of reward to remove: "),
+        |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
+    ) - 1;
+    state.rewards.remove(index_to_remove);
+}
+
+fn tick_reward(state: &mut AppState) {
+    let index_to_tick: usize = get_parsed_line_with_condition(
+        Some("Enter index of reward to tick: "),
+        |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
+    ) - 1;
+    let tick_response = state.rewards[index_to_tick].tick_reward();
+    state.cur_points -= tick_response.points_spent;
 }
