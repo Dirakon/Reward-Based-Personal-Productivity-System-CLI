@@ -2,9 +2,11 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 
+use crate::app_state::AppState;
 use crate::crypto_utils;
-use crate::io_utils::decode_file;
-use crate::io_utils::encode_file;
+use crate::io_utils::decode_file_from_moving;
+use crate::io_utils::encode_file_by_moving;
+use crate::io_utils::encode_file_by_moving_initial;
 use crate::task::RewardPointTransferProtocol;
 use chrono;
 use chrono::DateTime;
@@ -26,33 +28,36 @@ impl RewardType {
         }
     }
 
-    pub fn execute_reward(&mut self) -> Option<()> {
+    pub fn execute_reward(&mut self, state:&AppState) -> Option<()> {
         match self {
             RewardType::DecodeFiles(reward) => {
                 let file_index = reward.choose_file("Enter index of file to decode: ")?;
-                decode_file(&reward.key, &reward.files_to_decode[file_index].filepath);
+                let chosen_file = &reward.files_to_decode[file_index];
+                decode_file_from_moving(&chosen_file.path_after_encoding, &chosen_file.path_before_encoding);
                 reward.files_to_decode.remove(file_index);
             }
         };
         return Some(());
     }
-    pub fn activate_reward(&mut self) -> Option<()> {
+    pub fn activate_reward(&mut self, state:&AppState) -> Option<()> {
         match self {
             RewardType::DecodeFiles(reward) => {
                 let file_index = reward.choose_file("Enter index of file to rent: ")?;
                 reward.currently_decoded_file_index = Some(file_index);
-                decode_file(&reward.key, &reward.files_to_decode[file_index].filepath);
+                let chosen_file = &reward.files_to_decode[file_index];
+                decode_file_from_moving(&chosen_file.path_after_encoding, &chosen_file.path_before_encoding);
             }
         };
         return Some(());
     }
-    pub fn deactivate_reward(&mut self) -> Option<()> {
+    pub fn deactivate_reward(&mut self, state:&AppState) -> Option<()> {
         match self {
             RewardType::DecodeFiles(reward) => {
                 let file_index = reward
                     .currently_decoded_file_index
                     .expect("No file is decoded even though reward is being deactivated!");
-                encode_file(&reward.key, &reward.files_to_decode[file_index].filepath);
+                let chosen_file = &reward.files_to_decode[file_index];
+                let path_after_encoding = encode_file_by_moving(&chosen_file.path_after_encoding, &chosen_file.path_before_encoding);
                 reward.currently_decoded_file_index = None;
             }
         };
@@ -63,19 +68,17 @@ impl RewardType {
 #[derive(Serialize, Deserialize)]
 pub struct DecodeFilesReward {
     pub files_to_decode: Vec<SingularFileToDecode>,
-    pub key: crypto_utils::Key,
     pub currently_decoded_file_index: Option<usize>,
 }
 impl DecodeFilesReward {
     pub fn get_default() -> DecodeFilesReward {
         return DecodeFilesReward {
             files_to_decode: vec![],
-            key: crypto_utils::make_key(),
             currently_decoded_file_index: None,
         };
     }
-    pub fn add_new_file(&mut self, new_file: SingularFileToDecode) {
-        encode_file(&self.key, &new_file.filepath);
+    pub fn add_new_file(&mut self, mut new_file: SingularFileToDecode, state:&AppState) {
+        new_file.path_after_encoding =  encode_file_by_moving_initial(&state.folder_pool, &new_file.path_before_encoding);
         self.files_to_decode.push(new_file);
     }
     pub fn choose_file(&self, prompt: &str) -> Option<usize> {
@@ -94,13 +97,14 @@ impl DecodeFilesReward {
 
 #[derive(Serialize, Deserialize)]
 pub struct SingularFileToDecode {
-    pub filepath: String,
+    pub path_before_encoding: String,
     pub reward_name: String,
+    pub path_after_encoding: String
 }
 
 impl Display for SingularFileToDecode {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        return write!(f, "{} --- {}", self.reward_name, self.filepath);
+        return write!(f, "{} --- {}", self.reward_name, self.path_before_encoding);
     }
 }
 
@@ -141,13 +145,13 @@ impl RewardCollection {
             reward_type,
         };
     }
-    pub fn tick_reward(&mut self) -> TickResponse {
+    pub fn tick_reward(&mut self, state:&AppState) -> TickResponse {
         let no_action_response = TickResponse { points_spent: 0.0 };
         match self.spending_protocol {
             RewardPointTransferProtocol::HourlyTransfer(starting_date) => {
                 match starting_date {
                     Some(date) => {
-                        if self.reward_type.deactivate_reward().is_none() {
+                        if self.reward_type.deactivate_reward(state).is_none() {
                             return no_action_response;
                         };
                         self.spending_protocol = RewardPointTransferProtocol::HourlyTransfer(None);
@@ -158,7 +162,7 @@ impl RewardCollection {
                         };
                     }
                     None => {
-                        if self.reward_type.activate_reward().is_none() {
+                        if self.reward_type.activate_reward(state).is_none() {
                             return no_action_response;
                         };
                         self.spending_protocol = RewardPointTransferProtocol::HourlyTransfer(Some(Local::now()));
@@ -167,7 +171,7 @@ impl RewardCollection {
                 }
             }
             RewardPointTransferProtocol::SingularTransfer => {
-                if self.reward_type.execute_reward().is_none() {
+                if self.reward_type.execute_reward(state).is_none() {
                     return no_action_response;
                 };
                 return TickResponse {
@@ -183,10 +187,10 @@ impl RewardCollection {
                 let mut current_index_pre_retain = 0;
                 decode_files_reward.files_to_decode.retain(
                     |file|{
-                        let path = std::path::Path::new(&file.filepath);
+                        let path = std::path::Path::new(&file.path_after_encoding);
                         if !path.exists(){
                             println!("File by path {} in reward collection {} does not exist anymore! Removing it...",
-                            &file.filepath, self.name);
+                            &file.path_after_encoding, self.name);
                             decode_files_reward.currently_decoded_file_index = match decode_files_reward.currently_decoded_file_index{
                                 Some(index_in_question) => 
                                     if index_in_question == current_index_pre_retain{

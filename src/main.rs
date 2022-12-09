@@ -21,8 +21,6 @@ use sysinfo::{ProcessExt, SystemExt};
 
 use crate::cli_utils::get_parsed_line_with_condition;
 use crate::crypto_utils::make_key;
-use crate::io_utils::decode_file;
-use crate::io_utils::encode_file;
 use crate::reward_collection::DecodeFilesReward;
 use crate::reward_collection::RewardType;
 use crate::reward_collection::SingularFileToDecode;
@@ -153,17 +151,17 @@ fn reward_addition(
         reward_collection, reward_name, file_to_encode
     );
 
-    let collection_to_append = state
+    let collection_to_append_index = state
         .rewards
-        .iter_mut()
-        .find_map(|collection| {
+        .iter()
+        .position(|collection| {
             if collection.name == reward_collection {
-                match &mut collection.reward_type {
-                    RewardType::DecodeFiles(decode_files_reward) => Some(decode_files_reward),
-                    _ => None
+                match &collection.reward_type {
+                    RewardType::DecodeFiles(_) => true,
+                    _ => false,
                 }
             } else {
-                None
+                false
             }
         })
         .expect(&f!(
@@ -172,10 +170,21 @@ fn reward_addition(
         ));
 
     let new_file = SingularFileToDecode {
-        filepath: file_to_encode,
+        path_before_encoding: file_to_encode,
+        path_after_encoding: "".to_owned(),
         reward_name,
     };
-    collection_to_append.add_new_file(new_file);
+    let mut collection_to_append = state.rewards.remove(collection_to_append_index);
+    match &mut collection_to_append.reward_type {
+        RewardType::DecodeFiles(decode_files_reward) => 
+            decode_files_reward.add_new_file(new_file, &state)
+        ,
+        _ => panic!("Impossible branch! Position function above ensures that only DecodeFiles can be referenced here.")
+    }
+
+    state
+        .rewards
+        .insert(collection_to_append_index, collection_to_append);
 
     return state;
 }
@@ -289,6 +298,8 @@ fn tick_reward(state: &mut AppState) {
         Some("Enter index of reward to tick: "),
         |int_val: &usize| *int_val > 0 && *int_val <= state.rewards.len(),
     ) - 1;
-    let tick_response = state.rewards[index_to_tick].tick_reward();
+    let mut reward_to_tick = state.rewards.remove(index_to_tick);
+    let tick_response = reward_to_tick.tick_reward(&state);
+    state.rewards.insert(index_to_tick, reward_to_tick);
     state.cur_points -= tick_response.points_spent;
 }

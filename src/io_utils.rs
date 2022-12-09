@@ -9,7 +9,7 @@ use crate::crypto_utils::{decrypt, encrypt, Key};
 
 pub fn generate_name() -> String {
     let possible_characters: Vec<char> = "abcdefghijklmnopqrstuvwxyz".chars().collect();
-    let rng = rand::thread_rng();
+    let mut rng = rand::thread_rng();
     let filename_size = rng.gen_range(3..20);
     let name: String = (0..filename_size)
         .map(|_| possible_characters[rng.gen_range(0..possible_characters.len())])
@@ -17,11 +17,18 @@ pub fn generate_name() -> String {
     return name;
 }
 
-pub fn encode_file_by_moving(folder_pool: Vec<String>, path: &String) -> String {
-    let rng = rand::thread_rng();
-    let new_path = folder_pool[rng.gen_range(0..folder_pool.len())] + &generate_name();
-    fs::rename(path, new_path).expect(&f!("Couldn't move file {} back to {}!", path, new_path));
+pub fn encode_file_by_moving_initial(folder_pool: &Vec<String>, path: &String) -> String {
+    let mut rng = rand::thread_rng();
+    let new_path = (&folder_pool[rng.gen_range(0..folder_pool.len())]).clone() + &generate_name();
+    fs::rename(&path, &new_path).expect(&f!("Couldn't move file {} to {}!", &path, &new_path));
     return new_path;
+}
+pub fn encode_file_by_moving(chosen_path: &String, current_path: &String) {
+    fs::rename(current_path, chosen_path).expect(&f!(
+        "Couldn't move file {} to {}!",
+        current_path,
+        chosen_path
+    ));
 }
 pub fn decode_file_from_moving(current_path: &String, initial_path: &String) {
     fs::rename(current_path, initial_path).expect(&f!(

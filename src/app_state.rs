@@ -19,6 +19,7 @@ pub struct AppState {
     pub cur_points: f64,
     pub tasks: Vec<task::Task>,
     pub rewards: Vec<RewardCollection>,
+    pub folder_pool: Vec<String>,
     #[serde(default, deserialize_with = "skip", skip_serializing)]
     pub sys: System,
 }
@@ -38,6 +39,7 @@ impl AppState {
         return AppState {
             cur_points: (0.0),
             tasks: Vec::new(),
+            folder_pool: Vec::new(),
             rewards: Vec::new(),
             sys: System::new_all(),
         };
